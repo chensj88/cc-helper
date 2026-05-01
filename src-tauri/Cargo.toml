@@ -1,6 +1,6 @@
 [package]
 name = "cc-helper"
-version = "0.1.0"
+version = "1.0.0"
 description = "cc-helper - system tray companion for Claude Code"
 authors = []
 edition = "2021"
