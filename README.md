@@ -224,26 +224,6 @@ wrapper 将 stdin 保存到临时文件后重定向给实际二进制，确保 C
 - **通信**: Unix Domain Socket + JSON-line 协议（版本号校验）
 - **通知**: tauri-plugin-notification（NSUserNotification / libnotify / Windows Toast）
 
-## 开发路线
-
-- [x] V0.1 — Tauri 骨架 + 系统托盘 + helper-hook CLI + IPC
-- [x] V0.2 — Dynamic Island + 权限对话框 + AskUserQuestion
-- [x] V0.3 — 多会话管理 + 桌面通知 + 可拖拽 Island
-- [ ] V0.4 — 打包分发 + Hook 内嵌
-  - [x] cc-helper-hook 嵌入应用包（`externalBin`）
-  - [x] 托盘菜单一键 Install/Uninstall Hooks
-  - [x] CLI `--install`/`--uninstall` 参数
-  - [x] macOS 透明窗口修复
-  - [x] 生产构建路径修复
-  - [x] Wrapper 脚本机制（stdin 保存 + 路径空格规避）
-  - [x] 重命名为 cc-helper
-  - [x] Session staleness 检查（应对用户退出）
-  - [ ] macOS 签名 + 公证
-  - [ ] Windows/Debian 打包
-  - [ ] GitHub Actions CI 自动构建三平台安装包
-- [ ] V0.5 — Windows 适配
-- [ ] V1.0 — 设置面板
-
 ## License
 
 MIT
