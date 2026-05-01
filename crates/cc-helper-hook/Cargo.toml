@@ -1,0 +1,12 @@
+[package]
+name = "cc-helper-hook"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "cc-helper-hook"
+path = "src/main.rs"
+
+[dependencies]
+helper-protocol = { path = "../protocol" }
+serde_json = "1"

@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/protocol", "crates/cc-helper-hook", "src-tauri"]
+resolver = "2"

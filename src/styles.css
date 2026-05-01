@@ -1,0 +1,309 @@
+/* Permission Dialog Styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #1a1a1a;
+  background-color: #ffffff;
+  overflow: hidden;
+}
+
+.permission-dialog {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 16px;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.dialog-header .title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+.badge.tool {
+  background-color: #dbeafe;
+  color: #1d4ed8;
+}
+
+.dialog-body {
+  flex: 1;
+  padding: 12px 0;
+  overflow-y: auto;
+}
+
+.field {
+  margin-bottom: 10px;
+}
+
+.field .label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+
+.field .value {
+  display: block;
+  font-size: 14px;
+  color: #111827;
+}
+
+.field .code {
+  display: block;
+  background-color: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #1f2937;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.file-path {
+  word-break: break-all;
+}
+
+/* AskUserQuestion styles */
+.question-text {
+  font-size: 15px;
+  font-weight: 500;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.question-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  margin-bottom: 12px;
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.option-card {
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.option-card:hover {
+  border-color: #93c5fd;
+  background-color: #f0f7ff;
+}
+
+.option-card.selected {
+  border-color: #3b82f6;
+  background-color: #eff6ff;
+}
+
+.option-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.option-desc {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.other-input {
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 13px;
+  outline: none;
+  font-family: inherit;
+}
+
+.other-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+/* Footer */
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.btn {
+  padding: 8px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn:active:not(:disabled) {
+  opacity: 0.8;
+}
+
+.btn.deny {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+.btn.deny:hover {
+  background-color: #d1d5db;
+}
+
+.btn.allow {
+  background-color: #22c55e;
+  color: #ffffff;
+}
+
+.btn.allow:hover:not(:disabled) {
+  background-color: #16a34a;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #f3f4f6;
+    background-color: #1f2937;
+  }
+
+  .dialog-header .title {
+    color: #f9fafb;
+  }
+
+  .dialog-header {
+    border-bottom-color: #374151;
+  }
+
+  .field .label {
+    color: #9ca3af;
+  }
+
+  .field .value {
+    color: #f3f4f6;
+  }
+
+  .field .code {
+    background-color: #111827;
+    border-color: #374151;
+    color: #e5e7eb;
+  }
+
+  .dialog-footer {
+    border-top-color: #374151;
+  }
+
+  .btn.deny {
+    background-color: #374151;
+    color: #d1d5db;
+  }
+
+  .btn.deny:hover {
+    background-color: #4b5563;
+  }
+
+  .btn.allow {
+    background-color: #16a34a;
+    color: #ffffff;
+  }
+
+  .btn.allow:hover:not(:disabled) {
+    background-color: #15803d;
+  }
+
+  .badge {
+    background-color: #374151;
+    color: #d1d5db;
+  }
+
+  .badge.tool {
+    background-color: #1e3a5f;
+    color: #93c5fd;
+  }
+
+  .question-text {
+    color: #f9fafb;
+  }
+
+  .option-card {
+    border-color: #374151;
+  }
+
+  .option-card:hover {
+    border-color: #60a5fa;
+    background-color: #1e3a5f;
+  }
+
+  .option-card.selected {
+    border-color: #3b82f6;
+    background-color: #1e3a5f;
+  }
+
+  .option-label {
+    color: #f3f4f6;
+  }
+
+  .option-desc {
+    color: #9ca3af;
+  }
+
+  .other-input {
+    background-color: #111827;
+    border-color: #374151;
+    color: #f3f4f6;
+  }
+
+  .other-input:focus {
+    border-color: #3b82f6;
+  }
+}
