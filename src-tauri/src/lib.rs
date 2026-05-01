@@ -132,22 +132,24 @@ pub fn run() {
             let handle2 = app.handle().clone();
 
             // Periodic staleness check — degrade sessions stuck in Working/WaitingPermission
-            // when no hook events arrive (user exited Claude Code without triggering Stop)
+            // when no hook events arrive (user exited Claude Code without triggering Stop).
+            // Only emit UI when a degradation actually occurred, avoiding unconditional refresh.
             tauri::async_runtime::spawn(async move {
                 loop {
                     tokio::time::sleep(std::time::Duration::from_secs(60)).await;
                     let session_mgr = handle.state::<SessionManager>();
-                    session_mgr.tick_cleanup();
-                    let agg_status = session_mgr.aggregate_status();
-                    let sessions = session_mgr.get_sessions();
-                    let status_str = match agg_status {
-                        session::SessionStatus::Working => "working",
-                        session::SessionStatus::WaitingPermission => "permission",
-                        session::SessionStatus::Failed => "failed",
-                        session::SessionStatus::Idle => "idle",
-                    };
-                    let island_mgr = handle.state::<IslandManager>();
-                    island_mgr.emit_status(&handle, status_str, &sessions);
+                    if session_mgr.tick_cleanup() {
+                        let agg_status = session_mgr.aggregate_status();
+                        let sessions = session_mgr.get_sessions();
+                        let status_str = match agg_status {
+                            session::SessionStatus::Working => "working",
+                            session::SessionStatus::WaitingPermission => "permission",
+                            session::SessionStatus::Failed => "failed",
+                            session::SessionStatus::Idle => "idle",
+                        };
+                        let island_mgr = handle.state::<IslandManager>();
+                        island_mgr.emit_status(&handle, status_str, &sessions);
+                    }
                 }
             });
 

@@ -120,11 +120,13 @@ impl SessionManager {
         Self::cleanup_sessions(&mut sessions);
     }
 
-    fn cleanup_sessions(sessions: &mut HashMap<String, Session>) {
+    fn cleanup_sessions(sessions: &mut HashMap<String, Session>) -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
+
+        let mut degraded = false;
 
         // Degrade stale Working/WaitingPermission sessions to Idle
         // (Claude Code doesn't emit events on user exit)
@@ -134,6 +136,7 @@ impl SessionManager {
                 && elapsed >= STALE_THRESHOLD_SECONDS
             {
                 s.status = SessionStatus::Idle;
+                degraded = true;
             }
         }
 
@@ -163,6 +166,8 @@ impl SessionManager {
                 sessions.remove(session_id.as_str());
             }
         }
+
+        degraded
     }
 
     pub fn get_sessions(&self) -> Vec<Session> {
@@ -172,9 +177,10 @@ impl SessionManager {
     /// Run staleness check and cleanup without requiring a new event.
     /// Called periodically by a timer so dead sessions get detected even
     /// when no hook events arrive (e.g. user exited Claude Code).
-    pub fn tick_cleanup(&self) {
+    /// Returns `true` if any session was degraded (Working/WaitingPermission → Idle).
+    pub fn tick_cleanup(&self) -> bool {
         let mut sessions = self.sessions.lock().unwrap();
-        Self::cleanup_sessions(&mut sessions);
+        Self::cleanup_sessions(&mut sessions)
     }
 
     pub fn aggregate_status(&self) -> SessionStatus {
