@@ -210,6 +210,15 @@ body {
   background-color: #16a34a;
 }
 
+.btn.always-allow {
+  background-color: #3b82f6;
+  color: #ffffff;
+}
+
+.btn.always-allow:hover:not(:disabled) {
+  background-color: #2563eb;
+}
+
 /* Dark mode */
 @media (prefers-color-scheme: dark) {
   body {
@@ -259,6 +268,15 @@ body {
 
   .btn.allow:hover:not(:disabled) {
     background-color: #15803d;
+  }
+
+  .btn.always-allow {
+    background-color: #2563eb;
+    color: #ffffff;
+  }
+
+  .btn.always-allow:hover:not(:disabled) {
+    background-color: #1d4ed8;
   }
 
   .badge {

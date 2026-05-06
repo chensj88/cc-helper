@@ -21,15 +21,17 @@ fn resolve_permission(
     app: tauri::AppHandle,
     key: String,
     allowed: bool,
+    always: Option<bool>,
     answers: Option<serde_json::Value>,
 ) {
+    let always = always.unwrap_or(false);
     // Try island first, fallback to dialog manager
     let island_mgr = app.state::<IslandManager>();
     if island_mgr.has_pending(&key) {
-        island_mgr.resolve(&app, &key, allowed, answers);
+        island_mgr.resolve(&app, &key, allowed, always, answers);
     } else {
         let state = app.state::<DialogManager>();
-        state.resolve(&app, &key, allowed, answers);
+        state.resolve(&app, &key, allowed, always, answers);
     }
 }
 

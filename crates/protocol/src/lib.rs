@@ -74,6 +74,8 @@ pub struct PermissionDecision {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_input: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_permissions: Option<Vec<serde_json::Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub interrupt: Option<bool>,
@@ -115,6 +117,25 @@ impl Response {
                 decision: PermissionDecision {
                     behavior: "allow".to_string(),
                     updated_input: None,
+                    updated_permissions: None,
+                    message: None,
+                    interrupt: None,
+                },
+            }),
+        }
+    }
+
+    pub fn always_allow(permission_suggestions: Vec<serde_json::Value>) -> Self {
+        Self {
+            version: PROTOCOL_VERSION,
+            response_type: ResponseType::Decision,
+            message: None,
+            hook_specific_output: Some(HookSpecificOutput {
+                hook_event_name: "PermissionRequest".to_string(),
+                decision: PermissionDecision {
+                    behavior: "allow".to_string(),
+                    updated_input: None,
+                    updated_permissions: Some(permission_suggestions),
                     message: None,
                     interrupt: None,
                 },
@@ -136,6 +157,33 @@ impl Response {
                 decision: PermissionDecision {
                     behavior: "allow".to_string(),
                     updated_input: Some(updated),
+                    updated_permissions: None,
+                    message: None,
+                    interrupt: None,
+                },
+            }),
+        }
+    }
+
+    pub fn always_allow_with_input(
+        tool_input: &serde_json::Value,
+        answers: &serde_json::Value,
+        permission_suggestions: Vec<serde_json::Value>,
+    ) -> Self {
+        let mut updated = tool_input.clone();
+        if let Some(obj) = updated.as_object_mut() {
+            obj.insert("answers".to_string(), answers.clone());
+        }
+        Self {
+            version: PROTOCOL_VERSION,
+            response_type: ResponseType::Decision,
+            message: None,
+            hook_specific_output: Some(HookSpecificOutput {
+                hook_event_name: "PermissionRequest".to_string(),
+                decision: PermissionDecision {
+                    behavior: "allow".to_string(),
+                    updated_input: Some(updated),
+                    updated_permissions: Some(permission_suggestions),
                     message: None,
                     interrupt: None,
                 },
@@ -153,6 +201,7 @@ impl Response {
                 decision: PermissionDecision {
                     behavior: "deny".to_string(),
                     updated_input: None,
+                    updated_permissions: None,
                     message: Some(reason.into()),
                     interrupt: None,
                 },
@@ -204,5 +253,43 @@ mod tests {
         let output = &json["hookSpecificOutput"];
         assert_eq!(output["decision"]["behavior"], "deny");
         assert_eq!(output["decision"]["message"], "dangerous command");
+    }
+
+    #[test]
+    fn always_allow_response_format() {
+        let suggestions = vec![serde_json::json!({
+            "type": "addRules",
+            "rules": [{"toolName": "Bash", "ruleContent": "npm test"}],
+            "behavior": "allow",
+            "destination": "localSettings"
+        })];
+        let resp = Response::always_allow(suggestions);
+        let wire = resp.to_wire();
+        let json: serde_json::Value = serde_json::from_str(wire.trim()).unwrap();
+        let output = &json["hookSpecificOutput"];
+        assert_eq!(output["decision"]["behavior"], "allow");
+        let perms = &output["decision"]["updatedPermissions"];
+        assert_eq!(perms[0]["type"], "addRules");
+        assert_eq!(perms[0]["rules"][0]["ruleContent"], "npm test");
+    }
+
+    #[test]
+    fn always_allow_with_input_format() {
+        let tool_input = serde_json::json!({"questions": [{"question": "Which?"}]});
+        let answers = serde_json::json!({"Which?": "React"});
+        let suggestions = vec![serde_json::json!({
+            "type": "addRules",
+            "rules": [{"toolName": "Bash", "ruleContent": "npm test"}],
+            "behavior": "allow",
+            "destination": "localSettings"
+        })];
+        let resp = Response::always_allow_with_input(&tool_input, &answers, suggestions);
+        let wire = resp.to_wire();
+        let json: serde_json::Value = serde_json::from_str(wire.trim()).unwrap();
+        let output = &json["hookSpecificOutput"];
+        assert_eq!(output["decision"]["behavior"], "allow");
+        assert_eq!(output["decision"]["updatedInput"]["answers"]["Which?"], "React");
+        let perms = &output["decision"]["updatedPermissions"];
+        assert_eq!(perms[0]["type"], "addRules");
     }
 }

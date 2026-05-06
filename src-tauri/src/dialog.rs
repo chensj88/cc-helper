@@ -9,6 +9,7 @@ static DIALOG_COUNTER: AtomicU64 = AtomicU64::new(0);
 struct PendingRequest {
     response_tx: tokio::sync::oneshot::Sender<Response>,
     tool_input: serde_json::Value,
+    permission_suggestions: Vec<serde_json::Value>,
 }
 
 pub struct DialogManager {
@@ -33,6 +34,10 @@ impl DialogManager {
             .unwrap_or("unknown")
             .to_string();
         let tool_input = request.payload["tool_input"].clone();
+        let permission_suggestions = request.payload["permission_suggestions"]
+            .as_array()
+            .map(|a| a.clone())
+            .unwrap_or_default();
         let project_name = std::path::Path::new(&request.cwd)
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
@@ -47,6 +52,7 @@ impl DialogManager {
                 PendingRequest {
                     response_tx,
                     tool_input: tool_input.clone(),
+                    permission_suggestions: permission_suggestions.clone(),
                 },
             );
         }
@@ -62,19 +68,21 @@ impl DialogManager {
 
         #[cfg(debug_assertions)]
         let url = format!(
-            "/src/dialog.html?tool_name={}&project={}&key={}&input={}",
+            "/src/dialog.html?tool_name={}&project={}&key={}&input={}&suggestions={}",
             urlencoding::encode(&tool_name),
             urlencoding::encode(&project_name),
             urlencoding::encode(&key),
             urlencoding::encode(&serde_json::to_string(&tool_input).unwrap_or_default()),
+            urlencoding::encode(&serde_json::to_string(&permission_suggestions).unwrap_or_default()),
         );
         #[cfg(not(debug_assertions))]
         let url = format!(
-            "/src/dialog.html?tool_name={}&project={}&key={}&input={}",
+            "/src/dialog.html?tool_name={}&project={}&key={}&input={}&suggestions={}",
             urlencoding::encode(&tool_name),
             urlencoding::encode(&project_name),
             urlencoding::encode(&key),
             urlencoding::encode(&serde_json::to_string(&tool_input).unwrap_or_default()),
+            urlencoding::encode(&serde_json::to_string(&permission_suggestions).unwrap_or_default()),
         );
 
         match WebviewWindowBuilder::new(app, &window_label, WebviewUrl::App(url.into()))
@@ -109,10 +117,23 @@ impl DialogManager {
         app: &tauri::AppHandle,
         key: &str,
         allowed: bool,
+        always: bool,
         answers: Option<serde_json::Value>,
     ) {
         if let Some(pending) = self.pending.lock().unwrap().remove(key) {
-            let response = if allowed {
+            let suggestions = pending.permission_suggestions;
+
+            let response = if allowed && always {
+                if let Some(answers) = answers {
+                    Response::always_allow_with_input(
+                        &pending.tool_input,
+                        &answers,
+                        suggestions,
+                    )
+                } else {
+                    Response::always_allow(suggestions)
+                }
+            } else if allowed {
                 if let Some(answers) = answers {
                     Response::allow_with_input(&pending.tool_input, &answers)
                 } else {

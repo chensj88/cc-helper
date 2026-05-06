@@ -68,6 +68,7 @@
       </div>
       <div class="dialog-footer">
         <button class="btn deny" @click="deny">Deny</button>
+        <button v-if="permissionSuggestions?.length" class="btn always-allow" @click="allowAlways">Always Allow</button>
         <button class="btn allow" @click="allow">Allow</button>
       </div>
     </template>
@@ -90,6 +91,7 @@
       </div>
       <div class="dialog-footer">
         <button class="btn deny" @click="deny">Deny</button>
+        <button v-if="permissionSuggestions?.length" class="btn always-allow" @click="allowAlways">Always Allow</button>
         <button class="btn allow" @click="allow">Allow</button>
       </div>
     </template>
@@ -112,6 +114,7 @@
       </div>
       <div class="dialog-footer">
         <button class="btn deny" @click="deny">Deny</button>
+        <button v-if="permissionSuggestions?.length" class="btn always-allow" @click="allowAlways">Always Allow</button>
         <button class="btn allow" @click="allow">Allow</button>
       </div>
     </template>
@@ -160,6 +163,7 @@
       </div>
       <div class="dialog-footer">
         <button class="btn deny" @click="deny">Deny</button>
+        <button v-if="permissionSuggestions?.length" class="btn always-allow" @click="allowAlways">Always Allow</button>
         <button class="btn allow" @click="allow">Allow</button>
       </div>
     </template>
@@ -173,6 +177,7 @@ const props = defineProps<{
   toolName: string
   toolInput: Record<string, any>
   projectName: string
+  permissionSuggestions?: Array<Record<string, any>>
 }>()
 
 interface Question {
@@ -246,14 +251,18 @@ const canSubmit = computed(() => {
 function submitOrNext() {
   if (isLastQuestion.value) {
     // Submit all answers
-    if (window.__helperResolve) window.__helperResolve(true, { ...answers })
+    if (window.__helperResolve) window.__helperResolve(true, false, { ...answers })
   } else {
     currentQ.value++
   }
 }
 
 function allow() {
-  if (window.__helperResolve) window.__helperResolve(true)
+  if (window.__helperResolve) window.__helperResolve(true, false)
+}
+
+function allowAlways() {
+  if (window.__helperResolve) window.__helperResolve(true, true)
 }
 
 function deny() {

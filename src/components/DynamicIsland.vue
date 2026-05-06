@@ -66,6 +66,7 @@
         </div>
         <div class="expanded-footer">
           <button class="btn deny" @click="deny">Deny</button>
+          <button v-if="pending.permissionSuggestions?.length" class="btn always-allow" @click="allowAlways">Always Allow</button>
           <button class="btn allow" @click="allow">Allow</button>
         </div>
       </template>
@@ -90,6 +91,7 @@
         </div>
         <div class="expanded-footer">
           <button class="btn deny" @click="deny">Deny</button>
+          <button v-if="pending.permissionSuggestions?.length" class="btn always-allow" @click="allowAlways">Always Allow</button>
           <button class="btn allow" @click="allow">Allow</button>
         </div>
       </template>
@@ -118,6 +120,7 @@
         </div>
         <div class="expanded-footer">
           <button class="btn deny" @click="deny">Deny</button>
+          <button v-if="pending.permissionSuggestions?.length" class="btn always-allow" @click="allowAlways">Always Allow</button>
           <button class="btn allow" @click="allow">Allow</button>
         </div>
       </template>
@@ -225,6 +228,7 @@
         </div>
         <div class="expanded-footer">
           <button class="btn deny" @click="deny">Deny</button>
+          <button v-if="pending.permissionSuggestions?.length" class="btn always-allow" @click="allowAlways">Always Allow</button>
           <button class="btn allow" @click="allow">Allow</button>
         </div>
       </template>
@@ -357,6 +361,7 @@ interface PendingReq {
   toolName: string
   toolInput: Record<string, any>
   projectName: string
+  permissionSuggestions?: Array<Record<string, any>>
 }
 
 const pending = reactive<PendingReq>({
@@ -441,18 +446,19 @@ const canSubmit = computed(() => {
 
 function submitOrNext() {
   if (isLastQuestion.value) {
-    doAllow({ ...answers })
+    doAllow(false, { ...answers })
   } else {
     currentQ.value++
   }
 }
 
 // --- Actions ---
-async function doAllow(answers?: Record<string, string>) {
+async function doAllow(always: boolean, answers?: Record<string, string>) {
   try {
     await invoke('resolve_permission', {
       key: pending.key,
       allowed: true,
+      always: always || false,
       answers: answers || null,
     })
   } catch (e) {
@@ -462,7 +468,11 @@ async function doAllow(answers?: Record<string, string>) {
 }
 
 async function allow() {
-  await doAllow()
+  await doAllow(false)
+}
+
+async function allowAlways() {
+  await doAllow(true)
 }
 
 async function deny() {
@@ -568,6 +578,7 @@ onMounted(async () => {
     pending.toolName = p.toolName
     pending.toolInput = p.toolInput
     pending.projectName = p.projectName
+    pending.permissionSuggestions = p.permissionSuggestions
     status.value = p.toolName === 'ask_user_question' || p.toolName === 'AskUserQuestion' ? 'question' : 'permission'
     await expandForRequest()
   })
@@ -940,6 +951,15 @@ onUnmounted(() => {
 .btn.allow {
   background: #22c55e;
   color: #fff;
+}
+
+.btn.always-allow {
+  background: #3b82f6;
+  color: #fff;
+}
+
+.btn.always-allow:hover {
+  background: #2563eb;
 }
 
 .island-expanded.question .btn.allow {

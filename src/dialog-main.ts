@@ -10,14 +10,18 @@ const inputStr = params.get('input') || '{}'
 let toolInput = {}
 try { toolInput = JSON.parse(inputStr) } catch (e) {}
 
-const app = createApp(PermissionDialog, { toolName, toolInput, projectName: project })
+const suggestionsStr = params.get('suggestions') || '[]'
+let permissionSuggestions: Array<Record<string, any>> = []
+try { permissionSuggestions = JSON.parse(suggestionsStr) } catch (e) {}
+const app = createApp(PermissionDialog, { toolName, toolInput, projectName: project, permissionSuggestions })
 app.mount('#app')
 
-window.__helperResolve = async (allowed: boolean, answers?: Record<string, string>) => {
+window.__helperResolve = async (allowed: boolean, always?: boolean, answers?: Record<string, string>) => {
   try {
     await invoke('resolve_permission', {
       key,
       allowed,
+      always: always || false,
       answers: answers || null,
     })
   } catch (e) {
