@@ -480,6 +480,7 @@ async function deny() {
     await invoke('resolve_permission', {
       key: pending.key,
       allowed: false,
+      always: false,
       answers: null,
     })
   } catch (e) {
@@ -550,6 +551,9 @@ async function expandForRequest() {
   } catch (e) {
     console.error('[island] resize failed:', e)
   }
+  // Wait for DOM reflow after window resize so getBoundingClientRect
+  // returns the expanded size, not the old collapsed pill dimensions.
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
   await updateInputRegion()
   try { await invoke('island_set_interactive', { interactive: false }) } catch {}
 }

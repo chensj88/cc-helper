@@ -266,6 +266,6 @@ function allowAlways() {
 }
 
 function deny() {
-  if (window.__helperResolve) window.__helperResolve(false)
+  if (window.__helperResolve) window.__helperResolve(false, false)
 }
 </script>
