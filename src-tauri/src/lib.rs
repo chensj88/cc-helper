@@ -1,3 +1,4 @@
+mod backend;
 mod dialog;
 mod install;
 mod ipc;
@@ -42,6 +43,9 @@ fn get_sessions(app: tauri::AppHandle) -> Vec<session::Session> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize backend selection for Linux (Wayland/X11)
+    backend::init_backend();
+
     let mut ipc_rx = ipc::start_ipc_listener();
 
     tauri::Builder::default()
@@ -130,17 +134,15 @@ pub fn run() {
             let island_mgr = app.state::<IslandManager>();
             island_mgr.create_window(&app.handle().clone());
 
-            let handle = app.handle().clone();
             let handle2 = app.handle().clone();
 
-            // Periodic staleness check — degrade sessions stuck in Working/WaitingPermission
-            // when no hook events arrive (user exited Claude Code without triggering Stop).
-            // Only emit UI when a degradation actually occurred, avoiding unconditional refresh.
-            tauri::async_runtime::spawn(async move {
+            // Periodic staleness check: downgrade Working sessions idle after 5 min
+            let handle_bg = app.handle().clone();
+            std::thread::spawn(move || {
                 loop {
-                    tokio::time::sleep(std::time::Duration::from_secs(60)).await;
-                    let session_mgr = handle.state::<SessionManager>();
-                    if session_mgr.tick_cleanup() {
+                    std::thread::sleep(std::time::Duration::from_secs(60));
+                    let session_mgr = handle_bg.state::<SessionManager>();
+                    if session_mgr.check_staleness() {
                         let agg_status = session_mgr.aggregate_status();
                         let sessions = session_mgr.get_sessions();
                         let status_str = match agg_status {
@@ -149,8 +151,8 @@ pub fn run() {
                             session::SessionStatus::Failed => "failed",
                             session::SessionStatus::Idle => "idle",
                         };
-                        let island_mgr = handle.state::<IslandManager>();
-                        island_mgr.emit_status(&handle, status_str, &sessions);
+                        let island_mgr = handle_bg.state::<IslandManager>();
+                        island_mgr.emit_status(&handle_bg, status_str, &sessions);
                     }
                 }
             });
