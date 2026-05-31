@@ -14,17 +14,20 @@
       <span class="pill-text">{{ pillLabel }}</span>
     </div>
 
-    <!-- Expanded panel -->
-    <div v-else ref="expandedEl" class="island-expanded" :class="status">
+    <!-- Expanded panel — entire surface is draggable -->
+    <div
+      v-else
+      ref="expandedEl"
+      class="island-expanded"
+      :class="status"
+      @pointerdown="onExpandedPointerDown"
+      @pointermove="onExpandedPointerMove"
+      @pointerup="onExpandedPointerUp"
+    >
 
       <!-- Session list mode (click to open) -->
       <template v-if="expandMode === 'sessions'">
-        <div
-          class="expanded-header"
-          @pointerdown="onExpandedHeaderPointerDown"
-          @pointermove="onExpandedHeaderPointerMove"
-          @pointerup="onExpandedHeaderPointerUp"
-        >
+        <div class="expanded-header">
           <span class="project-name">Sessions</span>
           <button class="collapse-btn" @click="collapse">&times;</button>
         </div>
@@ -44,12 +47,7 @@
 
       <!-- Permission: Command mode -->
       <template v-else-if="mode === 'command'">
-        <div
-          class="expanded-header"
-          @pointerdown="onExpandedHeaderPointerDown"
-          @pointermove="onExpandedHeaderPointerMove"
-          @pointerup="onExpandedHeaderPointerUp"
-        >
+        <div class="expanded-header">
           <span class="project-name">{{ pending.projectName }}</span>
           <span class="tool-badge">{{ pending.toolName }}</span>
           <button class="collapse-btn" @click="collapse">&times;</button>
@@ -73,12 +71,7 @@
 
       <!-- Permission: File mode -->
       <template v-else-if="mode === 'file'">
-        <div
-          class="expanded-header"
-          @pointerdown="onExpandedHeaderPointerDown"
-          @pointermove="onExpandedHeaderPointerMove"
-          @pointerup="onExpandedHeaderPointerUp"
-        >
+        <div class="expanded-header">
           <span class="project-name">{{ pending.projectName }}</span>
           <span class="tool-badge">{{ pending.toolName }}</span>
           <button class="collapse-btn" @click="collapse">&times;</button>
@@ -98,12 +91,7 @@
 
       <!-- Permission: WebFetch mode -->
       <template v-else-if="mode === 'webfetch'">
-        <div
-          class="expanded-header"
-          @pointerdown="onExpandedHeaderPointerDown"
-          @pointermove="onExpandedHeaderPointerMove"
-          @pointerup="onExpandedHeaderPointerUp"
-        >
+        <div class="expanded-header">
           <span class="project-name">{{ pending.projectName }}</span>
           <span class="tool-badge">{{ pending.toolName }}</span>
           <button class="collapse-btn" @click="collapse">&times;</button>
@@ -127,12 +115,7 @@
 
       <!-- Permission: Skill mode -->
       <template v-else-if="mode === 'skill'">
-        <div
-          class="expanded-header"
-          @pointerdown="onExpandedHeaderPointerDown"
-          @pointermove="onExpandedHeaderPointerMove"
-          @pointerup="onExpandedHeaderPointerUp"
-        >
+        <div class="expanded-header">
           <span class="project-name">{{ pending.projectName }}</span>
           <span class="tool-badge">{{ pending.toolName }}</span>
           <button class="collapse-btn" @click="collapse">&times;</button>
@@ -155,12 +138,7 @@
 
       <!-- AskUserQuestion mode -->
       <template v-else-if="mode === 'question'">
-        <div
-          class="expanded-header"
-          @pointerdown="onExpandedHeaderPointerDown"
-          @pointermove="onExpandedHeaderPointerMove"
-          @pointerup="onExpandedHeaderPointerUp"
-        >
+        <div class="expanded-header">
           <span class="project-name">{{ pending.projectName }}</span>
           <span class="tool-badge">{{ pending.toolName }}</span>
           <button class="collapse-btn" @click="collapse">&times;</button>
@@ -206,12 +184,7 @@
 
       <!-- Fallback mode -->
       <template v-else>
-        <div
-          class="expanded-header"
-          @pointerdown="onExpandedHeaderPointerDown"
-          @pointermove="onExpandedHeaderPointerMove"
-          @pointerup="onExpandedHeaderPointerUp"
-        >
+        <div class="expanded-header">
           <span class="project-name">{{ pending.projectName }}</span>
           <span class="tool-badge">{{ pending.toolName }}</span>
           <button class="collapse-btn" @click="collapse">&times;</button>
@@ -242,34 +215,45 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow, LogicalPosition } from '@tauri-apps/api/window'
 
-// --- Pill drag + click via pointer capture ---
-let dragStartX = 0
-let dragStartY = 0
+// --- Drag state ---
+let dragStartPointerX = 0
+let dragStartPointerY = 0
+let dragInitWinX = 0
+let dragInitWinY = 0
 let didDrag = false
 
 async function onPillPointerDown(e: PointerEvent) {
   if (expanded.value) return
   const el = e.currentTarget as HTMLElement
   el.setPointerCapture(e.pointerId)
-  dragStartX = e.screenX
-  dragStartY = e.screenY
+  dragStartPointerX = e.screenX
+  dragStartPointerY = e.screenY
   didDrag = false
   try { await invoke('island_set_interactive', { interactive: true }) } catch {}
-}
-
-async function onPillPointerMove(e: PointerEvent) {
-  if (expanded.value) return
-  const dx = e.screenX - dragStartX
-  const dy = e.screenY - dragStartY
-  if (!didDrag && (Math.abs(dx) < 3 && Math.abs(dy) < 3)) return
-  didDrag = true
-  dragStartX = e.screenX
-  dragStartY = e.screenY
+  // Capture initial window position once — avoids 2 async calls per move event
   try {
     const appWindow = getCurrentWindow()
     const pos = await appWindow.outerPosition()
     const scale = await appWindow.scaleFactor()
-    await appWindow.setPosition(new LogicalPosition(pos.x / scale + dx, pos.y / scale + dy))
+    dragInitWinX = pos.x / scale
+    dragInitWinY = pos.y / scale
+  } catch {}
+}
+
+async function onPillPointerMove(e: PointerEvent) {
+  if (expanded.value) return
+  const el = e.currentTarget as HTMLElement
+  if (!el.hasPointerCapture(e.pointerId)) return
+  const dx = e.screenX - dragStartPointerX
+  const dy = e.screenY - dragStartPointerY
+  if (!didDrag && (Math.abs(dx) < 3 && Math.abs(dy) < 3)) return
+  didDrag = true
+  const targetX = dragInitWinX + dx
+  const targetY = dragInitWinY + dy
+  try {
+    await getCurrentWindow().setPosition(
+      new LogicalPosition(targetX, targetY)
+    )
   } catch {}
 }
 
@@ -277,11 +261,10 @@ async function onPillPointerUp(e: PointerEvent) {
   const el = e.currentTarget as HTMLElement
   try { el.releasePointerCapture(e.pointerId) } catch {}
   if (didDrag) {
+    const finalX = dragInitWinX + (e.screenX - dragStartPointerX)
+    const finalY = dragInitWinY + (e.screenY - dragStartPointerY)
     try {
-      const appWindow = getCurrentWindow()
-      const pos = await appWindow.outerPosition()
-      const scale = await appWindow.scaleFactor()
-      await invoke('island_save_position', { x: pos.x / scale, y: pos.y / scale })
+      await invoke('island_save_position', { x: finalX, y: finalY })
     } catch {}
     try { await invoke('island_set_interactive', { interactive: false }) } catch {}
     await updateInputRegion()
@@ -290,43 +273,48 @@ async function onPillPointerUp(e: PointerEvent) {
   }
 }
 
-async function onExpandedHeaderPointerDown(e: PointerEvent) {
+async function onExpandedPointerDown(e: PointerEvent) {
   const target = e.target as HTMLElement | null
-  if (target?.closest('button, input, textarea, select, a')) return
+  // Exclude interactive elements: buttons, inputs, links, option cards
+  if (target?.closest('button, input, textarea, select, a, .option-card, .btn')) return
   const el = e.currentTarget as HTMLElement
   el.setPointerCapture(e.pointerId)
-  dragStartX = e.screenX
-  dragStartY = e.screenY
+  dragStartPointerX = e.screenX
+  dragStartPointerY = e.screenY
   didDrag = false
   try { await invoke('island_set_interactive', { interactive: true }) } catch {}
-}
-
-async function onExpandedHeaderPointerMove(e: PointerEvent) {
-  const el = e.currentTarget as HTMLElement
-  if (!el.hasPointerCapture(e.pointerId)) return
-  const dx = e.screenX - dragStartX
-  const dy = e.screenY - dragStartY
-  if (!didDrag && (Math.abs(dx) < 3 && Math.abs(dy) < 3)) return
-  didDrag = true
-  dragStartX = e.screenX
-  dragStartY = e.screenY
+  // Capture initial window position once
   try {
     const appWindow = getCurrentWindow()
     const pos = await appWindow.outerPosition()
     const scale = await appWindow.scaleFactor()
-    await appWindow.setPosition(new LogicalPosition(pos.x / scale + dx, pos.y / scale + dy))
+    dragInitWinX = pos.x / scale
+    dragInitWinY = pos.y / scale
   } catch {}
 }
 
-async function onExpandedHeaderPointerUp(e: PointerEvent) {
+async function onExpandedPointerMove(e: PointerEvent) {
+  const el = e.currentTarget as HTMLElement
+  if (!el.hasPointerCapture(e.pointerId)) return
+  const dx = e.screenX - dragStartPointerX
+  const dy = e.screenY - dragStartPointerY
+  if (!didDrag && (Math.abs(dx) < 3 && Math.abs(dy) < 3)) return
+  didDrag = true
+  try {
+    await getCurrentWindow().setPosition(
+      new LogicalPosition(dragInitWinX + dx, dragInitWinY + dy)
+    )
+  } catch {}
+}
+
+async function onExpandedPointerUp(e: PointerEvent) {
   const el = e.currentTarget as HTMLElement
   try { el.releasePointerCapture(e.pointerId) } catch {}
   if (!didDrag) return
+  const finalX = dragInitWinX + (e.screenX - dragStartPointerX)
+  const finalY = dragInitWinY + (e.screenY - dragStartPointerY)
   try {
-    const appWindow = getCurrentWindow()
-    const pos = await appWindow.outerPosition()
-    const scale = await appWindow.scaleFactor()
-    await invoke('island_save_position', { x: pos.x / scale, y: pos.y / scale })
+    await invoke('island_save_position', { x: finalX, y: finalY })
   } catch {}
   try { await invoke('island_set_interactive', { interactive: false }) } catch {}
   await updateInputRegion()
@@ -700,7 +688,12 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  cursor: grab;
   animation: expandIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.island-expanded:active {
+  cursor: grabbing;
 }
 
 @keyframes expandIn {
@@ -759,6 +752,17 @@ onUnmounted(() => {
 
 .collapse-btn:hover {
   color: #e5e7eb;
+}
+
+/* Interactive elements inside expanded panel override the grab cursor */
+.island-expanded button,
+.island-expanded input,
+.island-expanded textarea,
+.island-expanded select,
+.island-expanded a,
+.island-expanded .option-card,
+.island-expanded .btn {
+  cursor: pointer;
 }
 
 /* === Session List === */

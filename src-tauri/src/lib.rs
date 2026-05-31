@@ -11,10 +11,51 @@ use island::IslandManager;
 use session::SessionManager;
 use std::sync::Mutex;
 use tauri::Manager;
+use tauri::menu::MenuItem;
+use tauri::tray::TrayIconEvent;
 use tauri_plugin_notification::NotificationExt;
 
 struct AppState {
     status: Mutex<String>,
+}
+
+struct TrayStatusItem {
+    item: Mutex<MenuItem<tauri::Wry>>,
+}
+
+fn update_tray_status(app: &tauri::AppHandle, status_str: &str, session_count: usize) {
+    let (tooltip, menu_text) = match status_str {
+        "working" => (
+            format!("cc-helper — Working ({})", session_count),
+            format!("Working ({})", session_count),
+        ),
+        "permission" => (
+            "cc-helper — Permission required".to_string(),
+            "Permission required".to_string(),
+        ),
+        "failed" => (
+            "cc-helper — Task failed".to_string(),
+            "Task failed".to_string(),
+        ),
+        _ if session_count > 0 => (
+            format!("cc-helper — {} idle sessions", session_count),
+            format!("{} idle sessions", session_count),
+        ),
+        _ => (
+            "cc-helper — No active sessions".to_string(),
+            "No active sessions".to_string(),
+        ),
+    };
+
+    // Update tray tooltip (unsupported on Linux, silently ignored)
+    if let Some(tray) = app.tray_by_id("main") {
+        let _ = tray.set_tooltip(Some(&tooltip));
+    }
+
+    // Update status menu item text (works on all platforms)
+    let tray_state = app.state::<TrayStatusItem>();
+    let item = tray_state.item.lock().unwrap();
+    let _ = item.set_text(menu_text);
 }
 
 #[tauri::command]
@@ -22,10 +63,9 @@ fn resolve_permission(
     app: tauri::AppHandle,
     key: String,
     allowed: bool,
-    always: Option<bool>,
+    always: bool,
     answers: Option<serde_json::Value>,
 ) {
-    let always = always.unwrap_or(false);
     // Try island first, fallback to dialog manager
     let island_mgr = app.state::<IslandManager>();
     if island_mgr.has_pending(&key) {
@@ -67,7 +107,15 @@ pub fn run() {
             island::get_island_status,
         ])
         .setup(move |app| {
+            // Create status menu item (disabled, info-only) inside setup where app is available
+            let status_item = MenuItem::new(app, "No active sessions", false, None::<&str>)?;
+            app.manage(TrayStatusItem {
+                item: Mutex::new(status_item.clone()),
+            });
+
             let menu = tauri::menu::MenuBuilder::new(app)
+                .item(&status_item)
+                .separator()
                 .text("install", "Install Hooks")
                 .text("uninstall", "Uninstall Hooks")
                 .separator()
@@ -79,10 +127,17 @@ pub fn run() {
                 .cloned()
                 .expect("Failed to load tray icon");
 
-            let _tray = tauri::tray::TrayIconBuilder::new()
+            let _tray = tauri::tray::TrayIconBuilder::with_id("main")
                 .icon(icon)
-                .tooltip("cc-helper")
+                .tooltip("cc-helper — No active sessions")
                 .menu(&menu)
+                .on_tray_icon_event(|tray, event| {
+                    if matches!(event, TrayIconEvent::Click { .. } | TrayIconEvent::DoubleClick { .. }) {
+                        let app = tray.app_handle();
+                        let island_mgr = app.state::<IslandManager>();
+                        island_mgr.ensure_window(&app);
+                    }
+                })
                 .on_menu_event(|app, event| {
                     match event.id.as_ref() {
                         "install" => {
@@ -145,6 +200,7 @@ pub fn run() {
                     if session_mgr.check_staleness() {
                         let agg_status = session_mgr.aggregate_status();
                         let sessions = session_mgr.get_sessions();
+                        let active_count = session_mgr.active_session_count();
                         let status_str = match agg_status {
                             session::SessionStatus::Working => "working",
                             session::SessionStatus::WaitingPermission => "permission",
@@ -153,6 +209,7 @@ pub fn run() {
                         };
                         let island_mgr = handle_bg.state::<IslandManager>();
                         island_mgr.emit_status(&handle_bg, status_str, &sessions);
+                        update_tray_status(&handle_bg, status_str, active_count);
                     }
                 }
             });
@@ -176,6 +233,7 @@ pub fn run() {
                         // Compute aggregate status for island
                         let agg_status = session_mgr.aggregate_status();
                         let sessions = session_mgr.get_sessions();
+                        let active_count = session_mgr.active_session_count();
                         let status_str = match agg_status {
                             session::SessionStatus::Working => "working",
                             session::SessionStatus::WaitingPermission => "permission",
@@ -186,6 +244,9 @@ pub fn run() {
                         // Update island status on every event
                         let island_mgr = handle2.state::<IslandManager>();
                         island_mgr.emit_status(&handle2, status_str, &sessions);
+
+                        // Update tray tooltip and status menu item
+                        update_tray_status(&handle2, status_str, active_count);
 
                         // Legacy status tracking
                         match request.event {

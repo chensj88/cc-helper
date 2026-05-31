@@ -3,6 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 const SETTINGS_PATH: &str = ".claude/settings.json";
+const OBSOLETE_PILOT_EVENTS: &[&str] = &["SessionEnd"];
 
 fn home_dir() -> Option<PathBuf> {
     std::env::var("HOME")
@@ -41,6 +42,38 @@ const PILOT_MARKER: &str = "pilot-hook";
 const OLD_HELPER_MARKER: &str = "helper-hook";
 const HOOK_MARKER: &str = "cc-helper-hook";
 
+fn remove_obsolete_pilot_hooks(settings: &mut Value) {
+    let Some(hooks) = settings.get_mut("hooks").and_then(|h| h.as_object_mut()) else {
+        return;
+    };
+
+    for event_name in OBSOLETE_PILOT_EVENTS {
+        let should_remove = if let Some(entries) =
+            hooks.get_mut(*event_name).and_then(|v| v.as_array_mut())
+        {
+            entries.retain(|entry| {
+                entry
+                    .get("hooks")
+                    .and_then(|h| h.as_array())
+                    .map_or(true, |arr| {
+                        !arr.iter().any(|h| {
+                            h.get("command")
+                                .and_then(|c| c.as_str())
+                                .map_or(false, |c| c.contains(PILOT_MARKER))
+                        })
+                    })
+            });
+            entries.is_empty()
+        } else {
+            false
+        };
+
+        if should_remove {
+            hooks.remove(*event_name);
+        }
+    }
+}
+
 pub fn install() -> Result<(), String> {
     let home = home_dir().ok_or("Cannot determine home directory")?;
     let settings_path = home.join(SETTINGS_PATH);
@@ -57,6 +90,8 @@ pub fn install() -> Result<(), String> {
     if settings.get("hooks").is_none() {
         settings["hooks"] = json!({});
     }
+
+    remove_obsolete_pilot_hooks(&mut settings);
 
     for (event_name, new_entries) in hook_configs.as_object().unwrap() {
         if settings["hooks"].get(event_name).is_none() {

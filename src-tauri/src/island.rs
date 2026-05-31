@@ -172,6 +172,10 @@ impl IslandManager {
         sessions: &[crate::session::Session],
     ) {
         self.ensure_window(app);
+        let active_count = sessions
+            .iter()
+            .filter(|s| !matches!(s.status, crate::session::SessionStatus::Idle))
+            .count();
         let session_infos: Vec<SessionInfo> = sessions
             .iter()
             .map(|s| {
@@ -185,7 +189,7 @@ impl IslandManager {
             .collect();
         let payload = IslandStatusPayload {
             status: status.to_string(),
-            session_count: sessions.len(),
+            session_count: active_count,
             sessions: session_infos,
         };
         *self.last_payload.lock().unwrap() = payload.clone();
