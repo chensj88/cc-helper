@@ -15,7 +15,7 @@ const COLLAPSED_H: f64 = 36.0;
 struct PendingRequest {
     response_tx: tokio::sync::oneshot::Sender<Response>,
     tool_input: serde_json::Value,
-    permission_suggestions: Vec<serde_json::Value>,
+    permission_suggestions: serde_json::Value,
 }
 
 pub struct IslandManager {
@@ -210,10 +210,8 @@ impl IslandManager {
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
 
-        let permission_suggestions = request.payload["permission_suggestions"]
-            .as_array()
-            .map(|a| a.clone())
-            .unwrap_or_default();
+        let permission_suggestions = request.payload["permission_suggestions"].clone();
+        let suggestions_vec = permission_suggestions.as_array().cloned().unwrap_or_default();
 
         let counter = REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
         let key = format!("{}_{}", request.session_id, counter);
@@ -232,7 +230,7 @@ impl IslandManager {
             tool_name,
             tool_input,
             project_name,
-            permission_suggestions,
+            permission_suggestions: suggestions_vec,
         };
         let _ = app.emit("island:show-request", &payload);
     }
@@ -246,20 +244,12 @@ impl IslandManager {
         answers: Option<serde_json::Value>,
     ) {
         if let Some(pending) = self.pending.lock().unwrap().remove(key) {
-            let suggestions = pending.permission_suggestions;
+            let suggestions_vec = pending.permission_suggestions.as_array().cloned().unwrap_or_default();
 
-            let response = if allowed && always {
-                if let Some(answers) = answers {
-                    Response::always_allow_with_input(
-                        &pending.tool_input,
-                        &answers,
-                        suggestions,
-                    )
-                } else {
-                    Response::always_allow(suggestions)
-                }
-            } else if allowed {
-                if let Some(answers) = answers {
+            let response = if allowed {
+                if always {
+                    Response::always_allow(suggestions_vec)
+                } else if let Some(answers) = answers {
                     Response::allow_with_input(&pending.tool_input, &answers)
                 } else {
                     Response::allow()

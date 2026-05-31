@@ -4,11 +4,6 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const STALE_THRESHOLD_SECONDS: u64 = 5 * 60; // 5 min — no event means session exited
-const IDLE_TIMEOUT_SECONDS: u64 = 24 * 60 * 60; // 24 hours
-const FAILED_TIMEOUT_SECONDS: u64 = 60 * 60; // 1 hour
-const MAX_SESSIONS: usize = 50;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SessionStatus {
@@ -53,37 +48,40 @@ impl SessionManager {
             .unwrap()
             .as_secs();
 
-        // Ensure session exists for any event — don't rely on SessionStart alone
-        if !sessions.contains_key(session_id) {
-            sessions.insert(
-                session_id.to_string(),
-                Session {
-                    session_id: session_id.to_string(),
-                    cwd: cwd.to_string(),
-                    project_name,
-                    status: SessionStatus::Working,
-                    last_event: event_name.clone(),
-                    timestamp: now,
-                },
-            );
-        }
-
         match event {
             HookEvent::SessionStart => {
-                // Session already created above; just ensure Working status
-                if let Some(s) = sessions.get_mut(session_id) {
-                    s.status = SessionStatus::Working;
-                    s.last_event = event_name;
-                    s.timestamp = now;
-                }
+                sessions.insert(
+                    session_id.to_string(),
+                    Session {
+                        session_id: session_id.to_string(),
+                        cwd: cwd.to_string(),
+                        project_name,
+                        status: SessionStatus::Working,
+                        last_event: event_name,
+                        timestamp: now,
+                    },
+                );
             }
-            HookEvent::SessionEnd | HookEvent::Stop | HookEvent::SubagentStop => {
+            HookEvent::Stop | HookEvent::SubagentStop => {
                 // Task finished but Claude Code may still be running
                 // Keep session visible with Idle status
                 if let Some(s) = sessions.get_mut(session_id) {
                     s.status = SessionStatus::Idle;
                     s.last_event = event_name;
                     s.timestamp = now;
+                } else {
+                    // Session might have been removed earlier, recreate it
+                    sessions.insert(
+                        session_id.to_string(),
+                        Session {
+                            session_id: session_id.to_string(),
+                            cwd: cwd.to_string(),
+                            project_name: project_name.clone(),
+                            status: SessionStatus::Idle,
+                            last_event: event_name,
+                            timestamp: now,
+                        },
+                    );
                 }
             }
             HookEvent::StopFailure => {
@@ -107,6 +105,20 @@ impl SessionManager {
                     s.timestamp = now;
                 }
             }
+            HookEvent::StopFailure => {
+                if let Some(s) = sessions.get_mut(session_id) {
+                    s.status = SessionStatus::Failed;
+                    s.last_event = event_name;
+                    s.timestamp = now;
+                }
+            }
+            HookEvent::PermissionRequest => {
+                if let Some(s) = sessions.get_mut(session_id) {
+                    s.status = SessionStatus::WaitingPermission;
+                    s.last_event = event_name;
+                    s.timestamp = now;
+                }
+            }
             // Log all other events
             _ => {
                 if let Some(s) = sessions.get_mut(session_id) {
@@ -120,34 +132,23 @@ impl SessionManager {
         Self::cleanup_sessions(&mut sessions);
     }
 
-    fn cleanup_sessions(sessions: &mut HashMap<String, Session>) -> bool {
+    fn cleanup_sessions(sessions: &mut HashMap<String, Session>) {
+        const MAX_SESSIONS: usize = 50;
+        const IDLE_TIMEOUT_SECONDS: u64 = 24 * 60 * 60; // 24 hours
+        const FAILED_TIMEOUT_SECONDS: u64 = 60 * 60; // 1 hour
+
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
 
-        let mut degraded = false;
-
-        // Degrade stale Working/WaitingPermission sessions to Idle
-        // (Claude Code doesn't emit events on user exit)
-        for s in sessions.values_mut() {
-            let elapsed = now - s.timestamp;
-            if matches!(s.status, SessionStatus::Working | SessionStatus::WaitingPermission)
-                && elapsed >= STALE_THRESHOLD_SECONDS
-            {
-                s.status = SessionStatus::Idle;
-                degraded = true;
-            }
-        }
-
-        // Remove sessions past their timeout
+        // Remove sessions that are Idle for more than 24 hours or Failed for more than 1 hour
         sessions.retain(|_, s| {
-            let timeout = match s.status {
-                SessionStatus::Idle => IDLE_TIMEOUT_SECONDS,
-                SessionStatus::Failed => FAILED_TIMEOUT_SECONDS,
-                _ => u64::MAX,
-            };
-            now - s.timestamp < timeout
+            match s.status {
+                SessionStatus::Idle => now - s.timestamp < IDLE_TIMEOUT_SECONDS,
+                SessionStatus::Failed => now - s.timestamp < FAILED_TIMEOUT_SECONDS,
+                _ => true,
+            }
         });
 
         // If still too many sessions, remove oldest ones
@@ -166,21 +167,10 @@ impl SessionManager {
                 sessions.remove(session_id.as_str());
             }
         }
-
-        degraded
     }
 
     pub fn get_sessions(&self) -> Vec<Session> {
         self.sessions.lock().unwrap().values().cloned().collect()
-    }
-
-    /// Run staleness check and cleanup without requiring a new event.
-    /// Called periodically by a timer so dead sessions get detected even
-    /// when no hook events arrive (e.g. user exited Claude Code).
-    /// Returns `true` if any session was degraded (Working/WaitingPermission → Idle).
-    pub fn tick_cleanup(&self) -> bool {
-        let mut sessions = self.sessions.lock().unwrap();
-        Self::cleanup_sessions(&mut sessions)
     }
 
     pub fn aggregate_status(&self) -> SessionStatus {
@@ -207,5 +197,34 @@ impl SessionManager {
             return SessionStatus::Working;
         }
         SessionStatus::Idle
+    }
+
+    /// Downgrade stale Working sessions to Idle (no events for 5 minutes).
+    /// Returns true if any session was actually downgraded.
+    pub fn check_staleness(&self) -> bool {
+        const STALE_THRESHOLD_SECONDS: u64 = 5 * 60; // 5 minutes
+
+        let mut sessions = self.sessions.lock().unwrap();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let mut changed = false;
+        for s in sessions.values_mut() {
+            if matches!(s.status, SessionStatus::Working)
+                && now - s.timestamp > STALE_THRESHOLD_SECONDS
+            {
+                s.status = SessionStatus::Idle;
+                s.last_event = "StaleDowngrade".to_string();
+                s.timestamp = now;
+                changed = true;
+            }
+        }
+
+        if changed {
+            Self::cleanup_sessions(&mut sessions);
+        }
+        changed
     }
 }
