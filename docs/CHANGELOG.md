@@ -1,5 +1,33 @@
 # 更新日志
 
+## v1.1.1 — Session 管理与 Hook 清理修复
+
+### 问题
+
+cc-helper 可能展示额外会话（如 `tmp` 等临时目录命名），会话计数不准确。
+
+### 根因
+
+- `Stop`/`SubagentStop` 在找不到已有 `session_id` 时反向创建 Idle 会话
+- Session 存储只用 `session_id` 作为 key，未区分不同 `cwd`
+- `get_sessions()` 返回顺序不稳定
+- Island/托盘计数包含 Idle 历史会话
+- 旧版 hook 可能残留废弃的 `SessionEnd` 配置
+- Island 初始状态在 Vue mount 后异步读取，首帧可能丢失
+
+### 修复
+
+- 未知 `Stop`/`SubagentStop` 事件不再创建新会话
+- Session key 使用 `session_id + cwd` 组合，区分同 ID 不同目录的会话
+- `get_sessions()` 稳定排序：WaitingPermission → Working → Failed → Idle
+- 新增 `active_session_count()` 只统计活跃会话
+- 托盘状态菜单项显示活跃会话数
+- 安装 hooks 时自动清理废弃的 `SessionEnd` 配置
+- Island 启动时先读取初始状态再挂载 Vue 组件
+- Dynamic Island 整个展开面板可拖拽，优化异步调用次数
+
+---
+
 ## Session 检测修复
 
 ### 问题

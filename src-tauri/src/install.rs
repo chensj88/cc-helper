@@ -8,6 +8,7 @@ const OLD_HELPER_MARKER: &str = "helper-hook";
 const HOOK_MARKER: &str = "cc-helper-hook";
 const WRAPPER_DIR: &str = ".claude/bin";
 const WRAPPER_NAME: &str = "cc-helper-hook";
+const OBSOLETE_PILOT_EVENTS: &[&str] = &["SessionEnd"];
 
 fn home_dir() -> Option<PathBuf> {
     std::env::var("HOME")
@@ -95,6 +96,38 @@ pub fn find_hook_binary() -> String {
         .to_string()
 }
 
+fn remove_obsolete_pilot_hooks(settings: &mut Value) {
+    let Some(hooks) = settings.get_mut("hooks").and_then(|h| h.as_object_mut()) else {
+        return;
+    };
+
+    for event_name in OBSOLETE_PILOT_EVENTS {
+        let should_remove = if let Some(entries) =
+            hooks.get_mut(*event_name).and_then(|v| v.as_array_mut())
+        {
+            entries.retain(|entry| {
+                entry
+                    .get("hooks")
+                    .and_then(|h| h.as_array())
+                    .map_or(true, |arr| {
+                        !arr.iter().any(|h| {
+                            h.get("command")
+                                .and_then(|c| c.as_str())
+                                .map_or(false, |c| c.contains(PILOT_MARKER))
+                        })
+                    })
+            });
+            entries.is_empty()
+        } else {
+            false
+        };
+
+        if should_remove {
+            hooks.remove(*event_name);
+        }
+    }
+}
+
 pub fn install_with_path(hook_path: &str) -> Result<(), String> {
     // Verify cc-helper-hook exists
     if !std::path::Path::new(hook_path).exists() {
@@ -122,6 +155,8 @@ pub fn install_with_path(hook_path: &str) -> Result<(), String> {
     if settings.get("hooks").is_none() {
         settings["hooks"] = json!({});
     }
+
+    remove_obsolete_pilot_hooks(&mut settings);
 
     for (event_name, new_entries) in helper_hooks.as_object().unwrap() {
         if settings["hooks"].get(event_name).is_none() {
