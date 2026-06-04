@@ -58,6 +58,10 @@ fn update_tray_status(app: &tauri::AppHandle, status_str: &str, session_count: u
     let _ = item.set_text(menu_text);
 }
 
+fn should_notify_for_event(event: &helper_protocol::HookEvent) -> bool {
+    matches!(event, helper_protocol::HookEvent::StopFailure)
+}
+
 #[tauri::command]
 fn resolve_permission(
     app: tauri::AppHandle,
@@ -257,11 +261,8 @@ pub fn run() {
                             helper_protocol::HookEvent::Stop => {
                                 let state = handle2.state::<AppState>();
                                 *state.status.lock().unwrap() = "idle".to_string();
-                                let _ = handle2.notification()
-                                    .builder()
-                                    .title("Claude Code: Task Complete")
-                                    .body(&format!("{} finished", project_name))
-                                    .show();
+                                // Stop事件不再触发完成通知，避免每轮对话结束弹窗噪声
+                                // 状态更新和Island/Tary刷新保留
                             }
                             helper_protocol::HookEvent::StopFailure => {
                                 let _ = handle2.notification()
